@@ -437,6 +437,55 @@
     }
     .price-empty p { font-size: var(--text-sm); }
 
+    /* ===== BOSS TIMER ===== */
+    .boss-cards {
+      display: flex;
+      gap: var(--space-6);
+      width: 100%;
+      align-items: stretch;
+    }
+    .boss-card {
+      flex: 1;
+      background: var(--color-surface);
+      border: 1px solid oklch(from var(--color-text) l c h / 0.08);
+      border-radius: var(--radius-lg);
+      padding: var(--space-10) var(--space-8);
+      text-align: center;
+      box-shadow: var(--shadow-md);
+    }
+    .boss-card.world  { --boss-accent: var(--color-gold);  --boss-accent-dim: var(--color-gold-highlight); }
+    .boss-card.normal { --boss-accent: var(--color-error); --boss-accent-dim: var(--color-error-highlight); }
+    .boss-card-title { font-size: var(--text-lg); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-1); }
+    .boss-label { font-size: var(--text-xs); color: var(--color-text-faint); text-transform: uppercase; letter-spacing: .12em; margin-bottom: var(--space-2); }
+    .boss-spawn-time { font-size: var(--text-base); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-6); font-variant-numeric: tabular-nums; }
+    .boss-countdown-row { display: flex; justify-content: center; margin-bottom: var(--space-2); }
+    .boss-digit-row { display: flex; align-items: center; gap: var(--space-3); }
+    .boss-digit-col { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+    .boss-time-number {
+      font-size: clamp(2rem, 1.2rem + 2.5vw, 3.5rem);
+      font-weight: 700;
+      color: var(--boss-accent);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      min-width: 2.5ch;
+      background: var(--color-surface-offset);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-3) var(--space-4);
+    }
+    .boss-time-unit { font-size: var(--text-xs); color: var(--color-text-faint); text-transform: uppercase; letter-spacing: .1em; }
+    .boss-time-sep {
+      font-size: var(--text-xl);
+      font-weight: 700;
+      color: var(--color-text-faint);
+      line-height: 1;
+      user-select: none;
+      flex-shrink: 0;
+      margin-bottom: calc(var(--text-xs) + var(--space-1));
+    }
+    @keyframes bossFlash { 0% { opacity: 1; } 40% { opacity: .35; } 100% { opacity: 1; } }
+    .boss-flash { animation: bossFlash .35s ease-out; }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 639px) {
       .header {
@@ -454,6 +503,9 @@
       .item-edit-form { grid-template-columns: 1fr; }
       .counter-btn { width: 48px; height: 48px; }
       .group-add-row { flex-wrap: wrap; }
+      .boss-cards { flex-direction: column; max-width: 480px; }
+      .boss-card { padding: var(--space-8) var(--space-6); }
+      .boss-time-number { font-size: var(--text-xl); padding: var(--space-2) var(--space-3); }
     }
 
     @media (min-width: 1024px) {
@@ -476,6 +528,7 @@
       <button role="tab" class="tab-btn" aria-selected="true" aria-controls="page-energy" id="tab-energy" onclick="switchTab('energy')">热量换算</button>
       <button role="tab" class="tab-btn" aria-selected="false" aria-controls="page-counter" id="tab-counter" onclick="switchTab('counter')">计数器</button>
       <button role="tab" class="tab-btn" aria-selected="false" aria-controls="page-price" id="tab-price" onclick="switchTab('price')">比价计算</button>
+      <button role="tab" class="tab-btn" aria-selected="false" aria-controls="page-timer" id="tab-timer" onclick="switchTab('timer')">Boss计时</button>
     </nav>
   </header>
 
@@ -546,6 +599,56 @@
             <path d="M16 10a4 4 0 01-8 0"/>
           </svg>
           <p>创建一个对比组，开始比价</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Boss Timer -->
+    <section id="page-timer" class="tool-page" role="tabpanel" aria-labelledby="tab-timer">
+      <div class="boss-cards">
+        <div class="boss-card normal">
+          <p class="boss-card-title">巢穴首领</p>
+          <p class="boss-label">下次刷新时间</p>
+          <p class="boss-spawn-time" id="n-spawn">计算中…</p>
+          <p class="boss-label">距离刷新还有</p>
+          <div class="boss-countdown-row" role="timer" aria-live="polite">
+            <div class="boss-digit-row">
+              <div class="boss-digit-col">
+                <span class="boss-time-number" id="n-m">00</span>
+                <span class="boss-time-unit">分</span>
+              </div>
+              <span class="boss-time-sep" aria-hidden="true">:</span>
+              <div class="boss-digit-col">
+                <span class="boss-time-number" id="n-s">00</span>
+                <span class="boss-time-unit">秒</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="boss-card world">
+          <p class="boss-card-title">世界首领</p>
+          <p class="boss-label">下次刷新时间</p>
+          <p class="boss-spawn-time" id="w-spawn">计算中…</p>
+          <p class="boss-label">距离刷新还有</p>
+          <div class="boss-countdown-row" role="timer" aria-live="polite">
+            <div class="boss-digit-row">
+              <div class="boss-digit-col">
+                <span class="boss-time-number" id="w-h">00</span>
+                <span class="boss-time-unit">时</span>
+              </div>
+              <span class="boss-time-sep" aria-hidden="true">:</span>
+              <div class="boss-digit-col">
+                <span class="boss-time-number" id="w-m">00</span>
+                <span class="boss-time-unit">分</span>
+              </div>
+              <span class="boss-time-sep" aria-hidden="true">:</span>
+              <div class="boss-digit-col">
+                <span class="boss-time-number" id="w-s">00</span>
+                <span class="boss-time-unit">秒</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -949,11 +1052,65 @@
       }
     }
 
+    /* ===== BOSS TIMER ===== */
+    function initBossTimer() {
+      function pad(n) { return String(n).padStart(2, '0'); }
+      function flash(el) { el.classList.remove('boss-flash'); void el.offsetWidth; el.classList.add('boss-flash'); }
+      function fmtDate(ts) {
+        return new Date(ts).toLocaleString('zh-CN', {
+          month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        }).replace(/\//g, '-');
+      }
+      function getNext(baseMs, intervalMs) {
+        const now = Date.now();
+        const elapsed = now - baseMs;
+        return baseMs + (Math.floor(elapsed / intervalMs) + 1) * intervalMs;
+      }
+      const WORLD = {
+        base: new Date('2023-10-27T22:00:00+08:00').getTime(),
+        interval: 12600 * 1000,
+        els: { spawn: document.getElementById('w-spawn'), h: document.getElementById('w-h'), m: document.getElementById('w-m'), s: document.getElementById('w-s') },
+        prev: { h: -1, m: -1, s: -1 }, next: 0, hasHours: true,
+      };
+      const NORMAL = {
+        base: new Date('2026-03-31T18:45:00+08:00').getTime(),
+        interval: 2700 * 1000,
+        els: { spawn: document.getElementById('n-spawn'), m: document.getElementById('n-m'), s: document.getElementById('n-s') },
+        prev: { m: -1, s: -1 }, next: 0, hasHours: false,
+      };
+
+      function updateCard(cfg) {
+        const now = Date.now();
+        if (now >= cfg.next) cfg.next = getNext(cfg.base, cfg.interval);
+        cfg.els.spawn.textContent = fmtDate(cfg.next);
+        const remaining = cfg.next - now;
+        const totalSecs = Math.floor(remaining / 1000);
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        if (cfg.hasHours) {
+          if (h !== cfg.prev.h) { cfg.els.h.textContent = pad(h); flash(cfg.els.h); cfg.prev.h = h; }
+          if (m !== cfg.prev.m) { cfg.els.m.textContent = pad(m); flash(cfg.els.m); cfg.prev.m = m; }
+          if (s !== cfg.prev.s) { cfg.els.s.textContent = pad(s); flash(cfg.els.s); cfg.prev.s = s; }
+        } else {
+          const totalM = Math.floor(totalSecs / 60);
+          if (totalM !== cfg.prev.m) { cfg.els.m.textContent = pad(totalM); flash(cfg.els.m); cfg.prev.m = totalM; }
+          if (s !== cfg.prev.s) { cfg.els.s.textContent = pad(s); flash(cfg.els.s); cfg.prev.s = s; }
+        }
+      }
+
+      function tick() { updateCard(WORLD); updateCard(NORMAL); }
+      tick();
+      setInterval(tick, 1000);
+    }
+
     /* ===== INIT ===== */
     document.addEventListener('DOMContentLoaded', () => {
       initEnergyConverter();
       initCounter();
       initPriceCalculator();
+      initBossTimer();
     });
   </script>
 </body>
