@@ -490,6 +490,31 @@
     @keyframes bossFlash { 0% { opacity: 1; } 40% { opacity: .35; } 100% { opacity: 1; } }
     .boss-flash { animation: bossFlash .35s ease-out; }
 
+    .boss-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+    .boss-toolbar .page-title { margin-bottom: 0; }
+    .boss-notify-btn { font-size: var(--text-sm); white-space: nowrap; }
+    .boss-notify-btn[aria-pressed="true"] {
+      color: var(--color-success);
+      border-color: oklch(from var(--color-success) l c h / 0.4);
+    }
+
+    .boss-card { transition: box-shadow var(--transition-interactive), border-color var(--transition-interactive); }
+    .boss-card.boss-soon {
+      border-color: var(--boss-accent);
+      box-shadow: 0 0 0 3px oklch(from var(--boss-accent) l c h / 0.2), var(--shadow-md);
+    }
+    @keyframes bossSpawnPulse {
+      0% { box-shadow: 0 0 0 0 oklch(from var(--color-success) l c h / 0.55); }
+      100% { box-shadow: 0 0 0 22px oklch(from var(--color-success) l c h / 0); }
+    }
+    .boss-card.boss-spawned { animation: bossSpawnPulse 1s ease-out 2; }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 639px) {
       .header {
@@ -510,6 +535,7 @@
       .boss-cards { flex-direction: column; max-width: 480px; }
       .boss-card { padding: var(--space-8) var(--space-6); }
       .boss-time-number { font-size: var(--text-xl); padding: var(--space-2) var(--space-3); }
+      .boss-toolbar { flex-wrap: wrap; }
     }
 
     @media (min-width: 1024px) {
@@ -602,6 +628,10 @@
 
     <!-- Boss Timer -->
     <section id="page-timer" class="tool-page" role="tabpanel" aria-labelledby="tab-timer">
+      <div class="boss-toolbar">
+        <h1 class="page-title">Boss 计时</h1>
+        <button id="boss-notify-toggle" class="btn-ghost boss-notify-btn" aria-pressed="false">开启刷新提醒</button>
+      </div>
       <div class="boss-cards">
         <div class="boss-card normal">
           <p class="boss-card-title">巢穴首领</p>
@@ -653,15 +683,38 @@
 
   <script>
     /* ===== TAB NAVIGATION ===== */
-    function switchTab(tabId) {
+    const TAB_IDS = ['energy', 'counter', 'price', 'timer'];
+    const ACTIVE_TAB_KEY = 'toolbox_active_tab';
+
+    function setActiveTab(tabId) {
+      if (!TAB_IDS.includes(tabId)) tabId = 'energy';
       document.querySelectorAll('.tool-page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(b => b.setAttribute('aria-selected', 'false'));
-
       const page = document.getElementById('page-' + tabId);
       if (page) page.classList.add('active');
-
       const tab = document.getElementById('tab-' + tabId);
       if (tab) tab.setAttribute('aria-selected', 'true');
+    }
+
+    function switchTab(tabId) {
+      if (!TAB_IDS.includes(tabId)) return;
+      setActiveTab(tabId);
+      const tab = document.getElementById('tab-' + tabId);
+      if (tab) tab.focus({ preventScroll: true });
+      try { localStorage.setItem(ACTIVE_TAB_KEY, tabId); } catch (e) {}
+      if (location.hash !== '#' + tabId) {
+        history.replaceState(null, '', '#' + tabId);
+      }
+    }
+
+    function restoreTab() {
+      const hash = location.hash.replace('#', '');
+      if (TAB_IDS.includes(hash)) return hash;
+      try {
+        const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+        if (saved && TAB_IDS.includes(saved)) return saved;
+      } catch (e) {}
+      return 'energy';
     }
 
     /* ===== ENERGY CONVERTER ===== */
@@ -704,32 +757,52 @@
     }
 
     /* ===== COUNTER ===== */
+    const COUNTER_KEY = 'toolbox_counter';
     let counterState = { value: 0 };
     let longPressTimer = null;
     let longPressInterval = null;
+    let longPressStep = 1;
+
+    function loadCounter() {
+      try {
+        const raw = localStorage.getItem(COUNTER_KEY);
+        if (raw !== null) counterState.value = parseInt(raw, 10) || 0;
+      } catch (e) {}
+      document.getElementById('counter-value').textContent = counterState.value;
+    }
 
     function updateCounter(delta) {
       counterState.value += delta;
       document.getElementById('counter-value').textContent = counterState.value;
+      try { localStorage.setItem(COUNTER_KEY, String(counterState.value)); } catch (e) {}
     }
 
     function resetCounter() {
       counterState.value = 0;
       document.getElementById('counter-value').textContent = 0;
+      try { localStorage.setItem(COUNTER_KEY, '0'); } catch (e) {}
     }
 
     function initCounter() {
+      loadCounter();
       const btnPlus = document.getElementById('btn-plus');
       const btnMinus = document.getElementById('btn-minus');
       const btnReset = document.getElementById('btn-reset');
 
-      function doPlus() { updateCounter(1); }
-      function doMinus() { updateCounter(-1); }
+      function doPlus() { updateCounter(longPressStep); }
+      function doMinus() { updateCounter(-longPressStep); }
 
       function startLongPress(actionFn) {
+        // Accelerate: step grows and interval shrinks the longer you hold.
+        longPressStep = 1;
         longPressTimer = setTimeout(() => {
-          longPressInterval = setInterval(actionFn, 100);
-        }, 600);
+          let ticks = 0;
+          longPressInterval = setInterval(() => {
+            actionFn();
+            ticks++;
+            if (ticks % 8 === 0) longPressStep = Math.min(longPressStep * 2, 100);
+          }, 90);
+        }, 450);
       }
 
       function stopLongPress() {
@@ -737,6 +810,7 @@
         clearInterval(longPressInterval);
         longPressTimer = null;
         longPressInterval = null;
+        longPressStep = 1;
       }
 
       btnPlus.addEventListener('pointerdown', e => { e.preventDefault(); doPlus(); startLongPress(doPlus); });
@@ -767,13 +841,13 @@
 
     function findCheapestInGroup(items) {
       if (items.length === 0) return [];
-      const withPrice = items.map(item => {
-        const up = calcUnitPrice(item);
-        return { id: item.id, unitPrice: up };
-      });
-      if (withPrice.some(w => w.unitPrice === null)) return [];
-      const minPrice = Math.min(...withPrice.map(w => w.unitPrice));
-      return withPrice.filter(w => w.unitPrice === minPrice).map(w => w.id);
+      // Only compare items that have a valid unit price; invalid ones never count.
+      const priced = items
+        .map(item => ({ id: item.id, unitPrice: calcUnitPrice(item) }))
+        .filter(w => w.unitPrice !== null && w.unitPrice > 0);
+      if (priced.length === 0) return [];
+      const minPrice = Math.min(...priced.map(w => w.unitPrice));
+      return priced.filter(w => w.unitPrice === minPrice).map(w => w.id);
     }
 
     function saveGroups() {
@@ -966,10 +1040,12 @@
           const prices = group.items.map(i => i.totalPrice);
           const cheapestItems = group.items.filter(i => cheapestIds.includes(i.id));
           const cheapestPrice = cheapestItems.length > 0 ? calcUnitPrice(cheapestItems[0]) : null;
-          const maxPriceItem = group.items.reduce((a, b) => calcUnitPrice(a) > calcUnitPrice(b) ? a : b);
-          const maxPrice = calcUnitPrice(maxPriceItem);
+          const pricedItems = group.items.filter(i => calcUnitPrice(i) !== null);
+          const maxPrice = pricedItems.length > 0
+            ? Math.max(...pricedItems.map(i => calcUnitPrice(i)))
+            : null;
           let percentStr = '--';
-          if (cheapestPrice && maxPrice && maxPrice > 0) {
+          if (cheapestPrice !== null && maxPrice !== null && maxPrice > 0) {
             percentStr = ((maxPrice - cheapestPrice) / maxPrice * 100).toFixed(1) + '%';
           }
           return '<div class="group-summary">共 ' + group.items.length + ' 件商品 · 价格区间 ¥' +
@@ -1051,6 +1127,11 @@
 
     /* ===== BOSS TIMER ===== */
     function initBossTimer() {
+      const NOTIFY_KEY = 'toolbox_boss_notify';
+      const originalTitle = document.title;
+      let notifyEnabled = false;
+      try { notifyEnabled = localStorage.getItem(NOTIFY_KEY) === '1'; } catch (e) {}
+
       function pad(n) { return String(n).padStart(2, '0'); }
       function flash(el) { el.classList.remove('boss-flash'); void el.offsetWidth; el.classList.add('boss-flash'); }
       function fmtDate(ts) {
@@ -1064,24 +1145,62 @@
         const elapsed = now - baseMs;
         return baseMs + (Math.floor(elapsed / intervalMs) + 1) * intervalMs;
       }
+      function fmtCountdown(totalSecs, hasHours) {
+        if (hasHours) {
+          const h = Math.floor(totalSecs / 3600);
+          const m = Math.floor((totalSecs % 3600) / 60);
+          const s = totalSecs % 60;
+          return pad(h) + ':' + pad(m) + ':' + pad(s);
+        }
+        const m = Math.floor(totalSecs / 60);
+        const s = totalSecs % 60;
+        return pad(m) + ':' + pad(s);
+      }
+
+      function notifySpawn(cfg) {
+        if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+        try {
+          new Notification(cfg.title + '已刷新', {
+            body: '首领已出现，快去挑战！',
+            tag: 'boss-' + cfg.key,
+          });
+        } catch (e) {}
+      }
+
+      function onSpawn(cfg) {
+        // Distinct spawn pulse so a refresh is obvious even without watching the digits.
+        cfg.card.classList.remove('boss-spawned');
+        void cfg.card.offsetWidth;
+        cfg.card.classList.add('boss-spawned');
+        notifySpawn(cfg);
+      }
+
       const WORLD = {
+        key: 'world', title: '世界首领',
         base: new Date('2023-10-27T22:00:00+08:00').getTime(),
         interval: 12600 * 1000,
         els: { spawn: document.getElementById('w-spawn'), h: document.getElementById('w-h'), m: document.getElementById('w-m'), s: document.getElementById('w-s') },
-        prev: { h: -1, m: -1, s: -1 }, next: 0, hasHours: true,
+        card: document.querySelector('.boss-card.world'),
+        prev: { h: -1, m: -1, s: -1 }, next: 0, hasHours: true, notifiedFor: undefined,
       };
       const NORMAL = {
+        key: 'normal', title: '巢穴首领',
         base: new Date('2026-03-31T18:45:00+08:00').getTime(),
         interval: 2700 * 1000,
         els: { spawn: document.getElementById('n-spawn'), m: document.getElementById('n-m'), s: document.getElementById('n-s') },
-        prev: { m: -1, s: -1 }, next: 0, hasHours: false,
+        card: document.querySelector('.boss-card.normal'),
+        prev: { m: -1, s: -1 }, next: 0, hasHours: false, notifiedFor: undefined,
       };
 
       function updateCard(cfg) {
         const now = Date.now();
         if (now >= cfg.next) cfg.next = getNext(cfg.base, cfg.interval);
+        // Detect a rollover into the next cycle → fire spawn effects once.
+        if (cfg.notifiedFor !== undefined && cfg.next !== cfg.notifiedFor) onSpawn(cfg);
+        cfg.notifiedFor = cfg.next;
+
         cfg.els.spawn.textContent = fmtDate(cfg.next);
-        const remaining = cfg.next - now;
+        const remaining = Math.max(0, cfg.next - now);
         const totalSecs = Math.floor(remaining / 1000);
         const h = Math.floor(totalSecs / 3600);
         const m = Math.floor((totalSecs % 3600) / 60);
@@ -1095,15 +1214,69 @@
           if (totalM !== cfg.prev.m) { cfg.els.m.textContent = pad(totalM); flash(cfg.els.m); cfg.prev.m = totalM; }
           if (s !== cfg.prev.s) { cfg.els.s.textContent = pad(s); flash(cfg.els.s); cfg.prev.s = s; }
         }
+
+        // Urgency highlight in the final minute before a spawn.
+        if (totalSecs > 0 && totalSecs <= 60) cfg.card.classList.add('boss-soon');
+        else cfg.card.classList.remove('boss-soon');
+
+        return totalSecs;
       }
 
-      function tick() { updateCard(WORLD); updateCard(NORMAL); }
+      function tick() {
+        const ws = updateCard(WORLD);
+        const ns = updateCard(NORMAL);
+        // Show a countdown in the tab title while the page is in the background.
+        if (document.hidden) {
+          document.title = '巢穴 ' + fmtCountdown(ns, false) + ' · 世界 ' + fmtCountdown(ws, true) + ' — ' + originalTitle;
+        } else if (document.title !== originalTitle) {
+          document.title = originalTitle;
+        }
+      }
+
+      // Notification toggle
+      const toggleBtn = document.getElementById('boss-notify-toggle');
+      function syncToggle() {
+        if (!toggleBtn) return;
+        const supported = ('Notification' in window);
+        const on = notifyEnabled && supported && Notification.permission === 'granted';
+        toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        toggleBtn.textContent = on ? '刷新提醒已开启' : '开启刷新提醒';
+      }
+      if (toggleBtn) {
+        syncToggle();
+        toggleBtn.addEventListener('click', async () => {
+          if (!('Notification' in window)) { alert('当前浏览器不支持桌面通知'); return; }
+          if (Notification.permission === 'granted') {
+            notifyEnabled = !notifyEnabled;
+          } else if (Notification.permission === 'denied') {
+            alert('通知权限已被拒绝，请在浏览器站点设置中重新开启');
+            return;
+          } else {
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') { syncToggle(); return; }
+            notifyEnabled = true;
+          }
+          try { localStorage.setItem(NOTIFY_KEY, notifyEnabled ? '1' : '0'); } catch (e) {}
+          syncToggle();
+        });
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && document.title !== originalTitle) document.title = originalTitle;
+      });
+
       tick();
       setInterval(tick, 1000);
     }
 
     /* ===== INIT ===== */
     document.addEventListener('DOMContentLoaded', () => {
+      setActiveTab(restoreTab());
+      window.addEventListener('hashchange', () => {
+        const hash = location.hash.replace('#', '');
+        if (TAB_IDS.includes(hash)) setActiveTab(hash);
+      });
+
       initEnergyConverter();
       initCounter();
       initPriceCalculator();
