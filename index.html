@@ -498,12 +498,6 @@
       margin-bottom: var(--space-6);
     }
     .boss-toolbar .page-title { margin-bottom: 0; }
-    .boss-notify-btn { font-size: var(--text-sm); white-space: nowrap; margin-top: 0.75rem; }
-    .boss-notify-btn[aria-pressed="true"] {
-      color: var(--color-success);
-      border-color: oklch(from var(--color-success) l c h / 0.4);
-    }
-
     .boss-card { transition: box-shadow var(--transition-interactive), border-color var(--transition-interactive); }
     .boss-card.boss-soon {
       border-color: var(--boss-accent);
@@ -675,7 +669,6 @@
               </div>
             </div>
           </div>
-          <button id="boss-notify-toggle" class="btn-ghost boss-notify-btn" aria-pressed="false">开启刷新提醒</button>
         </div>
       </div>
     </section>
@@ -1127,10 +1120,7 @@
 
     /* ===== BOSS TIMER ===== */
     function initBossTimer() {
-      const NOTIFY_KEY = 'toolbox_boss_notify';
       const originalTitle = document.title;
-      let notifyEnabled = false;
-      try { notifyEnabled = localStorage.getItem(NOTIFY_KEY) === '1'; } catch (e) {}
 
       function pad(n) { return String(n).padStart(2, '0'); }
       function flash(el) { el.classList.remove('boss-flash'); void el.offsetWidth; el.classList.add('boss-flash'); }
@@ -1157,16 +1147,6 @@
         return pad(m) + ':' + pad(s);
       }
 
-      function notifyAdvance() {
-        if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
-        try {
-          new Notification('世界首领 5 分钟后刷新', {
-            body: '请提前做好准备！',
-            tag: 'boss-adv-world',
-          });
-        } catch (e) {}
-      }
-
       function onSpawn(cfg) {
         // Distinct spawn pulse so a refresh is obvious even without watching the digits.
         cfg.card.classList.remove('boss-spawned');
@@ -1180,7 +1160,7 @@
         interval: 12600 * 1000,
         els: { spawn: document.getElementById('w-spawn'), h: document.getElementById('w-h'), m: document.getElementById('w-m'), s: document.getElementById('w-s') },
         card: document.querySelector('.boss-card.world'),
-        prev: { h: -1, m: -1, s: -1 }, next: 0, hasHours: true, notifiedFor: -1, advNotifiedFor: -1,
+        prev: { h: -1, m: -1, s: -1 }, next: 0, hasHours: true, notifiedFor: -1,
       };
       const NORMAL = {
         key: 'normal', title: '巢穴首领',
@@ -1218,11 +1198,6 @@
         if (totalSecs > 0 && totalSecs <= 60) cfg.card.classList.add('boss-soon');
         else cfg.card.classList.remove('boss-soon');
 
-        if (cfg.advNotifiedFor !== -1 && totalSecs > 0 && totalSecs <= 300 && cfg.next !== cfg.advNotifiedFor) {
-          notifyAdvance();
-          cfg.advNotifiedFor = cfg.next;
-        }
-
         return totalSecs;
       }
 
@@ -1235,34 +1210,6 @@
         } else if (document.title !== originalTitle) {
           document.title = originalTitle;
         }
-      }
-
-      // Notification toggle
-      const toggleBtn = document.getElementById('boss-notify-toggle');
-      function syncToggle() {
-        if (!toggleBtn) return;
-        const supported = ('Notification' in window);
-        const on = notifyEnabled && supported && Notification.permission === 'granted';
-        toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        toggleBtn.textContent = on ? '刷新提醒已开启' : '开启刷新提醒';
-      }
-      if (toggleBtn) {
-        syncToggle();
-        toggleBtn.addEventListener('click', async () => {
-          if (!('Notification' in window)) { alert('当前浏览器不支持桌面通知'); return; }
-          if (Notification.permission === 'granted') {
-            notifyEnabled = !notifyEnabled;
-          } else if (Notification.permission === 'denied') {
-            alert('通知权限已被拒绝，请在浏览器站点设置中重新开启');
-            return;
-          } else {
-            const perm = await Notification.requestPermission();
-            if (perm !== 'granted') { syncToggle(); return; }
-            notifyEnabled = true;
-          }
-          try { localStorage.setItem(NOTIFY_KEY, notifyEnabled ? '1' : '0'); } catch (e) {}
-          syncToggle();
-        });
       }
 
       document.addEventListener('visibilitychange', () => {
